@@ -54,7 +54,10 @@ extern "C"
 class ElasticBand
 {
 public:
-  ElasticBand(){};
+  ElasticBand(float x, float y, float z)
+  {
+    setLocation(x, y, z);
+  }
   void Advance(std::vector<double> x, std::vector<double> dx)
   {
     std::vector<double> delta_x = {0.0, 0.0, 0.0};
@@ -75,15 +78,21 @@ public:
     f_[2] = (stiffness_ * (distance - length_) - damping_ * v) * direction[2];
   }
 
+  void setLocation(float x, float y, float z)
+  {
+    point_[0] = x;
+    point_[1] = y;
+    point_[2] = z;
+  }
 
   double stiffness_ = 200;
   double damping_ = 100;
-  std::vector<double> point_ = {0, 0, 3};
+  std::vector<double> point_ = {0, 0, 1.5};
   double length_ = 0.0;
   bool enable_ = true;
   std::vector<double> f_ = {0, 0, 0};
 };
-inline ElasticBand elastic_band;
+inline ElasticBand elastic_band_L(0, 0.08, 1.5),  elastic_band_R(0, -0.08, 1.5);
 
 
 namespace
@@ -489,16 +498,25 @@ namespace
                 // elastic band on base link
                 if (param::config.enable_elastic_band == 1)
                 {
-                  if (elastic_band.enable_)
+                  if (elastic_band_L.enable_ && elastic_band_R.enable_)
                   {
-                    std::vector<double> x = {d->qpos[0], d->qpos[1], d->qpos[2]};
+                    int bid_L = mj_name2id(m, mjOBJ_BODY, "left_hang");
+                    int bid_R = mj_name2id(m, mjOBJ_BODY, "right_hang");
+
+                    std::vector<double> x_L = {d->xpos[3*bid_L], d->xpos[3*bid_L+1], d->xpos[3*bid_L+2]};
+                    std::vector<double> x_R = {d->xpos[3*bid_R], d->xpos[3*bid_R+1], d->xpos[3*bid_R+2]};
                     std::vector<double> dx = {d->qvel[0], d->qvel[1], d->qvel[2]};
 
-                    elastic_band.Advance(x, dx);
+                    elastic_band_L.Advance(x_L, dx);
+                    elastic_band_R.Advance(x_R, dx);
 
-                    d->xfrc_applied[param::config.band_attached_link] = elastic_band.f_[0];
-                    d->xfrc_applied[param::config.band_attached_link + 1] = elastic_band.f_[1];
-                    d->xfrc_applied[param::config.band_attached_link + 2] = elastic_band.f_[2];
+                    d->xfrc_applied[param::config.band_attached_link_L] = elastic_band_L.f_[0];
+                    d->xfrc_applied[param::config.band_attached_link_L + 1] = elastic_band_L.f_[1];
+                    d->xfrc_applied[param::config.band_attached_link_L + 2] = elastic_band_L.f_[2];
+
+                    d->xfrc_applied[param::config.band_attached_link_R] = elastic_band_R.f_[0];
+                    d->xfrc_applied[param::config.band_attached_link_R + 1] = elastic_band_R.f_[1];
+                    d->xfrc_applied[param::config.band_attached_link_R + 2] = elastic_band_R.f_[2];
                   }
                 }
 
@@ -591,8 +609,11 @@ void *UnitreeSdk2BridgeThread(void *arg)
   if (body_id < 0) {
     body_id = mj_name2id(m, mjOBJ_BODY, "base_link");
   }
-  param::config.band_attached_link = 6 * body_id;
-  
+  int left_hang_id = mj_name2id(m, mjOBJ_BODY, "left_hang");
+  int right_hang_id = mj_name2id(m, mjOBJ_BODY, "right_hang");
+  param::config.band_attached_link_L = 6 * left_hang_id;
+  param::config.band_attached_link_R = 6 * right_hang_id;
+
   std::unique_ptr<UnitreeSDK2BridgeBase> interface = nullptr;
   if (m->nu > NUM_MOTOR_IDL_GO) {
     interface = std::make_unique<G1Bridge>(m, d);
@@ -623,11 +644,20 @@ void user_key_cb(GLFWwindow* window, int key, int scancode, int act, int mods) {
   {
     if(param::config.enable_elastic_band == 1) {
       if (key==GLFW_KEY_9) {
-        elastic_band.enable_ = !elastic_band.enable_;
+        elastic_band_L.enable_ = !elastic_band_L.enable_;
+        elastic_band_R.enable_ = !elastic_band_R.enable_;
       } else if (key==GLFW_KEY_7 || key==GLFW_KEY_UP) {
-        elastic_band.length_ -= 0.1;
+        elastic_band_L.length_ -= 0.1;
+        elastic_band_R.length_ -= 0.1;
       } else if (key==GLFW_KEY_8 || key==GLFW_KEY_DOWN) {
-        elastic_band.length_ += 0.1;
+        elastic_band_L.length_ += 0.1;
+        elastic_band_R.length_ += 0.1;
+      } else if (key == GLFW_KEY_6 || key==GLFW_KEY_RIGHT){
+        elastic_band_L.point_[0] += 0.1;
+        elastic_band_R.point_[0] += 0.1;
+      } else if (key == GLFW_KEY_5 || key==GLFW_KEY_LEFT){
+        elastic_band_L.point_[0] -= 0.1;
+        elastic_band_R.point_[0] -= 0.1;
       }
     }
   }

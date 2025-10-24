@@ -104,9 +104,9 @@ public:
     RobotBridge(mjModel *model, mjData *data) : UnitreeSDK2BridgeBase(model, data)
     {
         lowcmd = std::make_shared<LowCmd_t>("rt/lowcmd");
-        lowstate = std::make_unique<LowState_t>();
+        lowstate = std::make_unique<LowState_t>("rt/lowstate");
         lowstate->joystick = joystick;
-        highstate = std::make_unique<HighState_t>();
+        highstate = std::make_unique<HighState_t>("rt/odommodestate");
         wireless_controller = std::make_unique<WirelessController_t>();
         wireless_controller->joystick = joystick;
         thread_ = std::make_shared<unitree::common::RecurrentThread>(
@@ -158,6 +158,10 @@ public:
                 lowstate->msg_.imu_state().accelerometer()[1] = mj_data_->sensordata[dim_motor_sensor_ + 8];
                 lowstate->msg_.imu_state().accelerometer()[2] = mj_data_->sensordata[dim_motor_sensor_ + 9];
             }
+            if(wireless_controller->joystick)
+            {
+                memcpy(&lowstate->msg_.wireless_remote()[0], wireless_controller->joystick->combine().buff, 40);
+            }
             lowstate->msg_.tick() = std::round(mj_data_->time / 1e-3);
             lowstate->unlockAndPublish();
         }
@@ -181,7 +185,7 @@ public:
     std::unique_ptr<WirelessController_t> wireless_controller;
     std::shared_ptr<LowCmd_t> lowcmd;
     std::unique_ptr<LowState_t> lowstate;
-    
+
 private:
     unitree::common::RecurrentThreadPtr thread_;
 };
