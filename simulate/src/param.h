@@ -23,6 +23,8 @@ inline struct SimulationConfig
 
     int print_scene_information;
 
+    int enable_perturb_force;
+
     int enable_elastic_band;
     int band_attached_link_L = 0;
     int band_attached_link_R = 0;
@@ -42,6 +44,7 @@ inline struct SimulationConfig
             joystick_bits = cfg["joystick_bits"].as<int>();
             print_scene_information = cfg["print_scene_information"].as<int>();
             enable_elastic_band = cfg["enable_elastic_band"].as<int>();
+            enable_perturb_force = cfg["enable_perturb_force"].as<int>();
         }
         catch(const std::exception& e)
         {

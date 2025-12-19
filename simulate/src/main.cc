@@ -73,9 +73,15 @@ public:
 
     double v = dx[0] * direction[0] + dx[1] * direction[1] + dx[2] * direction[2];
 
-    f_[0] = (stiffness_ * (distance - length_) - damping_ * v) * direction[0];
-    f_[1] = (stiffness_ * (distance - length_) - damping_ * v) * direction[1];
-    f_[2] = (stiffness_ * (distance - length_) - damping_ * v) * direction[2];
+    if(distance <length_) {
+      f_[0] = 0;
+      f_[1] = 0;
+      f_[2] = 0;
+      return;
+    }
+    f_[0] = (stiffness_ * ((delta_x[2]> 0.42)*distance - length_) - damping_ * v) * direction[0];
+    f_[1] = (stiffness_ * ((delta_x[2]> 0.42)*distance - length_) - damping_ * v) * direction[1];
+    f_[2] = (stiffness_ * ((delta_x[2]> 0.42)*0.25 - length_) - damping_ * v) * direction[2];
   }
 
   void setLocation(float x, float y, float z)
@@ -85,8 +91,8 @@ public:
     point_[2] = z;
   }
 
-  double stiffness_ = 200;
-  double damping_ = 100;
+  double stiffness_ = 400;
+  double damping_ = 140;
   std::vector<double> point_ = {0, 0, 1.5};
   double length_ = 0.0;
   bool enable_ = true;
@@ -94,6 +100,43 @@ public:
 };
 inline ElasticBand elastic_band_L(0, 0.08, 1.5),  elastic_band_R(0, -0.08, 1.5);
 
+class forcePerturbation
+{
+  double direction_yaw_;
+  double direction_[3];
+  double force_magnitude_;
+  public:
+    forcePerturbation()
+    {
+      direction_yaw_ = 0.0;
+      direction_[0] = cos(direction_yaw_);
+      direction_[1] = sin(direction_yaw_);
+      direction_[2] = 0.0;
+      force_magnitude_ = 0.0;
+    }
+    ~forcePerturbation(){}
+    void increment_yaw(double delta_yaw)
+    {
+      direction_yaw_ += delta_yaw;
+      direction_[0] = cos(direction_yaw_);
+      direction_[1] = sin(direction_yaw_);
+      std::cout << "Perturbation force magnitude: " << force_magnitude_ << " N X: " << force_magnitude_*direction_[0] << " N Y: " << force_magnitude_*direction_[1] << " N" << std::endl;
+    }
+    void increment_magnitude(double delta_magnitude)
+    {
+      force_magnitude_ += delta_magnitude;
+      std::cout << "Perturbation force magnitude: " << force_magnitude_ << " N X: " << force_magnitude_*direction_[0] << " N Y: " << force_magnitude_*direction_[1] << " N" << std::endl;
+    }
+    double getForceX()
+    {
+      return force_magnitude_ * direction_[0];
+    }
+    double getForceY()
+    {
+      return force_magnitude_ * direction_[1];
+    }
+};  
+inline forcePerturbation perturbation;
 
 namespace
 {
@@ -495,6 +538,14 @@ namespace
                   measured = true;
                 }
 
+                // Perturbation force on the robot
+                if (param::config.enable_perturb_force == 1)
+                {
+                  int body_id = mj_name2id(m, mjOBJ_BODY, "torso_link");
+                  d->xfrc_applied[6 * body_id] = perturbation.getForceX();
+                  d->xfrc_applied[6 * body_id + 1] = perturbation.getForceY();
+                }
+
                 // elastic band on base link
                 if (param::config.enable_elastic_band == 1)
                 {
@@ -519,7 +570,7 @@ namespace
                     d->xfrc_applied[param::config.band_attached_link_R + 2] = elastic_band_R.f_[2];
                   }
                 }
-
+                
                 // call mj_step
                 mj_step(m, d);
                 stepped = true;
@@ -531,7 +582,7 @@ namespace
                 }
               }
             }
-
+                        
             // save current state to history buffer
             if (stepped)
             {
@@ -642,22 +693,44 @@ __attribute__((used, visibility("default"))) extern "C" void _mj_rosettaError(co
 void user_key_cb(GLFWwindow* window, int key, int scancode, int act, int mods) {
   if (act==GLFW_PRESS)
   {
+    if (key==GLFW_KEY_P)
+    {
+      param::config.enable_perturb_force = 1 - param::config.enable_perturb_force; 
+      std::cout << "Perturbation force enabled. Use arrow keys to adjust direction and magnitude." << std::endl;
+    }
+
+    if(param::config.enable_perturb_force == 1) {
+      if(key == GLFW_KEY_A) {
+        perturbation.increment_yaw(0.05);
+      } else if (key == GLFW_KEY_D) {
+        perturbation.increment_yaw(-0.05);
+      } else if (key == GLFW_KEY_W) {
+        perturbation.increment_magnitude(1.5);
+      } else if (key == GLFW_KEY_S) {
+        perturbation.increment_magnitude(-1.5);
+      }
+    }
+
     if(param::config.enable_elastic_band == 1) {
       if (key==GLFW_KEY_9) {
         elastic_band_L.enable_ = !elastic_band_L.enable_;
         elastic_band_R.enable_ = !elastic_band_R.enable_;
       } else if (key==GLFW_KEY_7 || key==GLFW_KEY_UP) {
-        elastic_band_L.length_ -= 0.1;
-        elastic_band_R.length_ -= 0.1;
+        // elastic_band_L.point_[2] += 0.04;
+        // elastic_band_R.point_[2] += 0.04;
+        elastic_band_L.length_ -= 0.04;
+        elastic_band_R.length_ -= 0.04;
       } else if (key==GLFW_KEY_8 || key==GLFW_KEY_DOWN) {
-        elastic_band_L.length_ += 0.1;
-        elastic_band_R.length_ += 0.1;
-      } else if (key == GLFW_KEY_6 || key==GLFW_KEY_RIGHT){
-        elastic_band_L.point_[0] += 0.1;
-        elastic_band_R.point_[0] += 0.1;
-      } else if (key == GLFW_KEY_5 || key==GLFW_KEY_LEFT){
-        elastic_band_L.point_[0] -= 0.1;
-        elastic_band_R.point_[0] -= 0.1;
+        // elastic_band_L.point_[2] -= 0.04;
+        // elastic_band_R.point_[2] -= 0.04;
+        elastic_band_L.length_ += 0.04;
+        elastic_band_R.length_ += 0.04;
+      } else if (key == GLFW_KEY_6 || key==GLFW_KEY_LEFT){
+        elastic_band_L.point_[0] += 0.04;
+        elastic_band_R.point_[0] += 0.04;
+      } else if (key == GLFW_KEY_5 || key==GLFW_KEY_RIGHT){
+        elastic_band_L.point_[0] -= 0.04;
+        elastic_band_R.point_[0] -= 0.04;
       }
     }
   }
