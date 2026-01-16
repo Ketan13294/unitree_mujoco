@@ -1,7 +1,7 @@
 <mujoco model="g1_29dof scene">
   <include file="g1_29dof.xml"/>
 
-  <statistic center="0 0 0.1" extent="0.8"/>
+  <statistic center="0 0 0.5" extent="1.8"/>
 
  <default>
     <geom friction="0.8 0.01 0.0005" solref="0.001 1" solimp="0.95 0.99 0.001"/>
